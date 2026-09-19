@@ -22,6 +22,25 @@ df.columns = (
 )
 
 df['date'] = pd.to_datetime(df['date'], format='%m-%d-%y', errors='coerce')
+#Remove technical / empy columns
+df = df.drop(columns=['index', 'unnamed_22'], errors='ignore')
 
-df.to_sql('amazon_sales', engine, if_exists='append', index=False)
+text_columns = [
+    'status', 'fulfilment', 'category',
+    'sales_channel', 'ship_service_level'
+]
+
+for column in text_columns:
+    if column in df.columns:
+        df[column] = df[column].str.strip()
+        
+df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+df['qty'] = pd.to_numeric(df['qty'], errors='coerce').fillna(0).astype(int)
+
+print(f"Rows: {len(df):,}")
+print(f"Unique orders: {df['order_id'].nunique():,}")
+print(f"Missing amount: {df['amount'].isna().sum():,}")
+print(f"Duplicate rows: {df.duplicated().sum():,}")
+
+df.to_sql('amazon_sales', engine, if_exists='replace', index=False)
 print(f"Success! Loaded {len(df)} lines.")
