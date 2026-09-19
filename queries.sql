@@ -3,12 +3,49 @@
 -- Database: PostgreSQL (salary_db / amazon_sales)
 -- ==========================================
 
+-- ==========================================
+-- Order-level analytical mart
+-- One record = one order
+-- ==========================================
+
+CREATE OR REPLACE VIEW vw_order_metrics AS
+SELECT 
+    order_id,
+    MIN(date)::date AS order_date,
+    MIN(status) AS status,
+    MIN(fulfilment) AS fulfilment,
+    MIN(sales_channel) AS sales_channel,
+    MIN(ship_service_level) AS ship_service_level,
+    MIN(ship_state) AS ship_state,
+    MIN(ship_city) AS ship_city,
+    BOOL_OR(b2b) AS is_b2b,
+    COUNT(*) AS line_items,
+    SUM(qty) AS units,
+    SUM(amount) AS order_amount, 
+    CASE 
+        WHEN MIN(status) = 'Cancelled' THEN 'Cancelled'
+        WHEN MIN(status) LIKE 'Shipped - Returned%' THEN 'Returned'
+        WHEN MIN(status) LIKE 'Shipped - Returning%' THEN 'Returning'
+        WHEN MIN(status) LIKE 'Shipped - Delivered%' THEN 'Delivered'
+        WHEN MIN(status) = 'Shipped' THEN 'Shipped'
+        WHEN MIN(status) LIKE 'Pending%' THEN 'Pending'
+        ELSE 'In progress'
+    END AS order_stage
+FROM amazon_sales
+GROUP BY order_id;
+
+-- Test query 
+SELECT
+    COUNT(*) AS total_orders,
+    SUM(units) AS total_units,
+    ROUND(SUM(order_amount)::numeric, 2) AS gross_order_value,
+    ROUND(AVG(order_amount)::numeric, 2) AS avg_order_value
+FROM vw_order_metrics;
+
 -- ------------------------------------------
 -- 1. Order funnel and cancellation rate
 -- ------------------------------------------
--- ------------------------------------------
--- 1. Order funnel and cancellation rate
--- ------------------------------------------
+
 WITH funnel AS (
     SELECT
         order_stage,
@@ -90,41 +127,3 @@ GROUP BY sales_month
 ORDER BY sales_month;
 
 
--- ==========================================
--- Order-level analytical mart
--- One record = one order
--- ==========================================
-
-CREATE OR REPLACE VIEW vw_order_metrics AS
-SELECT 
-    order_id,
-    MIN(date)::date AS order_date,
-    MIN(status) AS status,
-    MIN(fulfilment) AS fulfilment,
-    MIN(sales_channel) AS sales_channel,
-    MIN(ship_service_level) AS ship_service_level,
-    MIN(ship_state) AS ship_state,
-    MIN(ship_city) AS ship_city,
-    BOOL_OR(b2b) AS is_b2b,
-    COUNT(*) AS line_items,
-    SUM(qty) AS units,
-    SUM(amount) AS order_amount, -- <-- ВОТ ЗДЕСЬ НУЖНО БЫЛО ДОБАВИТЬ ЗАПЯТУЮ
-    CASE 
-        WHEN MIN(status) = 'Cancelled' THEN 'Cancelled'
-        WHEN MIN(status) LIKE 'Shipped - Returned%' THEN 'Returned'
-        WHEN MIN(status) LIKE 'Shipped - Returning%' THEN 'Returning'
-        WHEN MIN(status) LIKE 'Shipped - Delivered%' THEN 'Delivered'
-        WHEN MIN(status) = 'Shipped' THEN 'Shipped'
-        WHEN MIN(status) LIKE 'Pending%' THEN 'Pending'
-        ELSE 'In progress'
-    END AS order_stage
-FROM amazon_sales
-GROUP BY order_id;
-
--- Test query 
-SELECT
-    COUNT(*) AS total_orders,
-    SUM(units) AS total_units,
-    ROUND(SUM(order_amount)::numeric, 2) AS gross_order_value,
-    ROUND(AVG(order_amount)::numeric, 2) AS avg_order_value
-FROM vw_order_metrics;
