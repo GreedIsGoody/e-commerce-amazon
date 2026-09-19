@@ -24,8 +24,9 @@ Production-ready Data Analytics portfolio project analyzing e-commerce sales tra
    * **70.7%** of completed orders are fulfilled by Amazon (**FBA**), while **29.3%** are handled directly by the **Merchant (FBM)**.
    * FBA shows higher volume throughput and improved fulfillment reliability.
 
-3. **Revenue Leakage & Order Cancellations:**
-   * **18,332 orders** (~14% of overall order volume) were canceled, resulting in ~6.9M INR in lost gross revenue.
+3. 3. **Revenue Leakage & Order Cancellations:**
+   * **17,185 unique orders** were canceled, representing a **14.28% cancellation rate**.
+   * The potential gross order value of canceled orders is **6.92M INR**.
    * Average Order Value (AOV) remains stable across all fulfillment statuses at ~640–680 INR.
 
 ---
