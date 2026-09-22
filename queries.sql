@@ -169,19 +169,43 @@ ORDER BY non_cancelled_gross_revenue DESC;
 
 
 -- ------------------------------------------
--- 4. Monthly non-cancelled gross value and average order value
+-- 4. Monthly non-cancelled gross value trend
 -- ------------------------------------------
-SELECT 
-    DATE_TRUNC('month', date)::date AS sales_month,
-    COUNT(DISTINCT order_id) AS total_orders,
-    SUM(qty) AS total_units,
-    ROUND(SUM(amount)::numeric, 2) AS monthly_revenue,
-    ROUND((SUM(amount) / COUNT(DISTINCT order_id))::numeric, 2) AS avg_order_value
-FROM amazon_sales
-WHERE status <> 'Cancelled'
-  AND status NOT LIKE 'Pending%'
-  AND date IS NOT NULL
-GROUP BY sales_month
+WITH monthly_sales AS (
+    SELECT
+        DATE_TRUNC('month', order_date)::date AS sales_month,
+        COUNT(*) AS total_orders,
+        SUM(units) AS total_units,
+        COUNT(DISTINCT order_date) AS days_with_data,
+        SUM(order_amount) AS non_cancelled_gross_revenue,
+        AVG(order_amount) AS avg_order_value
+    FROM vw_order_metrics
+    WHERE order_stage NOT IN ('Cancelled', 'Pending')
+        AND order_date IS NOT NULL
+    GROUP BY DATE_TRUNC('month', order_date)::date
+)
+SELECT
+    sales_month,
+    total_orders,
+    total_units,
+    days_with_data,
+    ROUND(non_cancelled_gross_revenue::numeric, 2)
+        AS non_cancelled_gross_revenue,
+    ROUND(
+        (non_cancelled_gross_revenue / NULLIF(days_with_data, 0))::numeric,
+        2
+    ) AS avg_daily_gross_value,
+    ROUND(avg_order_value::numeric, 2) AS avg_order_value,
+    ROUND(
+        100.0 * (
+            non_cancelled_gross_revenue
+            - LAG(non_cancelled_gross_revenue) OVER (ORDER BY sales_month)
+        )
+        / NULLIF(
+            LAG(non_cancelled_gross_revenue) OVER (ORDER BY sales_month),
+            0
+        ),
+        2
+    ) AS gross_value_mom_pct
+FROM monthly_sales
 ORDER BY sales_month;
-
-
