@@ -209,3 +209,41 @@ SELECT
     ) AS gross_value_mom_pct
 FROM monthly_sales
 ORDER BY sales_month;
+
+-- ------------------------------------------
+-- 5. Weekly non-cancelled gross value trend
+-- ------------------------------------------
+WITH weekly_sales AS (
+    SELECT
+        DATE_TRUNC('week', order_date)::date AS week_start,
+        COUNT(*) AS total_orders,
+        COUNT(DISTINCT order_date) AS days_with_data,
+        SUM(order_amount) AS non_cancelled_gross_revenue
+    FROM vw_order_metrics
+    WHERE order_stage NOT IN ('Cancelled', 'Pending')
+      AND order_date IS NOT NULL
+    GROUP BY DATE_TRUNC('week', order_date)::date
+),
+complete_weeks AS (
+    SELECT *
+    FROM weekly_sales
+    WHERE days_with_data = 7
+)
+SELECT
+    week_start,
+    total_orders,
+    ROUND(non_cancelled_gross_revenue::numeric, 2)
+        AS non_cancelled_gross_revenue,
+    ROUND(
+        100.0 * (
+            non_cancelled_gross_revenue
+            - LAG(non_cancelled_gross_revenue) OVER (ORDER BY week_start)
+        )
+        / NULLIF(
+            LAG(non_cancelled_gross_revenue) OVER (ORDER BY week_start),
+            0
+        ),
+        2
+    ) AS gross_value_wow_pct
+FROM complete_weeks
+ORDER BY week_start;
