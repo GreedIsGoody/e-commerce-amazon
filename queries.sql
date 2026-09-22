@@ -22,7 +22,7 @@ SELECT
     COUNT(*) AS line_items,
     SUM(qty) AS units,
     SUM(amount) AS order_amount, 
-    CASE 
+    CASE
         WHEN MIN(status) = 'Cancelled' THEN 'Cancelled'
         WHEN MIN(status) LIKE 'Shipped - Returned%' THEN 'Returned'
         WHEN MIN(status) LIKE 'Shipped - Returning%' THEN 'Returning'
@@ -124,34 +124,52 @@ FROM vw_order_metrics
 GROUP BY fulfilment
 ORDER BY total_orders DESC;
 -- ------------------------------------------
--- 3. Product Category Performance (ABC Revenue Analysis)
--- Calculates net revenue per category and its cumulative contribution percentage
+-- 3. Product category ABC analysis
 -- ------------------------------------------
 WITH category_sales AS (
-    SELECT 
+    SELECT
         category,
         SUM(qty) AS units_sold,
-        ROUND(SUM(amount)::numeric, 2) AS revenue
+        SUM(amount) AS non_cancelled_gross_revenue
     FROM amazon_sales
     WHERE status <> 'Cancelled'
       AND status NOT LIKE 'Pending%'
       AND amount IS NOT NULL
     GROUP BY category
+),
+category_shares AS (
+    SELECT
+        category,
+        units_sold,
+        non_cancelled_gross_revenue,
+        100.0 * non_cancelled_gross_revenue
+            / SUM(non_cancelled_gross_revenue) OVER ()
+            AS revenue_share_pct,
+        100.0 * SUM(non_cancelled_gross_revenue) OVER (
+            ORDER BY non_cancelled_gross_revenue DESC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) / SUM(non_cancelled_gross_revenue) OVER ()
+            AS cumulative_revenue_share_pct
+    FROM category_sales
 )
-SELECT 
+SELECT
     category,
     units_sold,
-    revenue,
-    ROUND(
-        (revenue * 100.0 / SUM(revenue) OVER ()), 2
-    ) AS revenue_share_pct
-FROM category_sales
-ORDER BY revenue DESC;
+    ROUND(non_cancelled_gross_revenue::numeric, 2) AS non_cancelled_gross_revenue,
+    ROUND(revenue_share_pct::numeric, 2) AS revenue_share_pct,
+    ROUND(cumulative_revenue_share_pct::numeric, 2)
+        AS cumulative_revenue_share_pct,
+    CASE 
+        WHEN cumulative_revenue_share_pct <= 80 THEN 'A'
+        WHEN cumulative_revenue_share_pct <= 95 THEN 'B'
+        ELSE 'C'
+    END AS abc_class
+FROM category_shares
+ORDER BY non_cancelled_gross_revenue DESC;
 
 
 -- ------------------------------------------
--- 4. Monthly Sales & Average Order Value Trends
--- Tracks net monthly revenue, completed order volume, and AOV over time
+-- 4. Monthly non-cancelled gross value and average order value
 -- ------------------------------------------
 SELECT 
     DATE_TRUNC('month', date)::date AS sales_month,
